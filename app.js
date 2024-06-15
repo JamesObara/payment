@@ -91,7 +91,7 @@ app.get("/stkpush", (req, res) => {
             PartyA: "254710502718", //phone number to receive the stk push
             PartyB: process.env.BUSINESSSHORTCODE,
             PhoneNumber: "254710502718",
-            CallBackURL: "https://2f73-102-217-127-13.ngrok-free.app",
+            CallBackURL: process.env.CALLBACKURI,
             AccountReference: "KSU PAY",
             TransactionDesc: "Mpesa Daraja API stk push test",
           },
