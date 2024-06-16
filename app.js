@@ -126,12 +126,36 @@ app.get("/stkpush", (req, res) => {
     .catch(console.log);
 });
 
+//get access token 2
+const getAccessTokenn = async (req ,res , next) => {
+  const consumer_key = process.env.CONSUMER_KEY; 
+  const consumer_secret = process.env.CONSUMER_SECRET; 
+  const url =
+    "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials";
+  const auth =
+    "Basic " +
+    new Buffer.from(`${consumer_key}:${consumer_secret}`).toString("base64");
+
+    await axios.get(url, {
+      headers: {
+        Authorization: auth,
+      },
+    }).then((res) => {
+      access_token = res.data.access_token;
+      next()
+
+    }).catch((err) => {
+      console.log(err);
+    })
+ 
+}
+
 //MPESA STK PUSH ROUTE2
-app.post("/stk", attachAccessToken, async (req, res) => {
+app.post("/stk", getAccessTokenn, async (req, res) => {
   let {phone_number  } = req.body;
-  const accessToken = req.accessToken;
+  // const accessToken = req.accessToken;
   const timestamp = moment().format("YYYYMMDDHHmmss");
-  const auth = "Bearer " + accessToken;
+  // const auth = "Bearer " + access_token;
   const password = new Buffer.from(
     "174379" +
       "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919" +
@@ -157,7 +181,7 @@ app.post("/stk", attachAccessToken, async (req, res) => {
     }),
     method:"POST",
     headers: {
-      Authorization: auth,
+      Authorization: `Bearer ${access_token}`,
       "Content-Type": "application/json"
     },
   }).then((resp) => {
