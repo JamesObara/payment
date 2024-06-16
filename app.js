@@ -153,6 +153,7 @@ const getAccessTokenn = async (req ,res , next) => {
 //MPESA STK PUSH ROUTE2
 app.post("/stk", getAccessTokenn, async (req, res) => {
   let {phone_number  } = req.body;
+   console.log('Phone number received:', phone_number);
   // const accessToken = req.accessToken;
   const timestamp = moment().format("YYYYMMDDHHmmss");
   // const auth = "Bearer " + access_token;
