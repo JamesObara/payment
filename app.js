@@ -4,7 +4,6 @@
 */
 
 const express = require("express");
-const app = express();
 const http = require("http");
 const bodyParser = require("body-parser");
 const axios = require("axios"); // Import 'axios' instead of 'request'
@@ -15,11 +14,17 @@ const fs = require("fs");
 require('dotenv').config();
 
 
+const app = express();
+app.use(cors({
+    origin: "*",
+}));
+app.use(express.json());
+app.use(express.urlencoded({extended: true}))
+
 const port = process.env.PORT  || 3000;
-const hostname = "localhost";
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(cors());
+// app.use(bodyParser.json());
+// app.use(bodyParser.urlencoded({ extended: false }));
+
 app.use('/', apiRouter);
 
 const server = http.createServer(app);
@@ -49,11 +54,20 @@ async function getAccessToken() {
     throw error;
   }
 }
+const attachAccessToken = async (req, res, next) => {
+  try {
+    const accessToken = await getAccessToken();
+    req.accessToken = accessToken;
+    next();
+  } catch (error) {
+    res.status(500).send('Error fetching access token');
+  }
+};
 
 app.get("/", (req, res) => {
   res.send("MPESA DARAJA API For Ksu App");
   var timeStamp = moment().format("YYYYMMDDHHmmss");
-  console.log(timeStamp);
+//   console.log(timeStamp);
 });
 
 
@@ -110,6 +124,47 @@ app.get("/stkpush", (req, res) => {
         });
     })
     .catch(console.log);
+});
+
+//MPESA STK PUSH ROUTE2
+app.post("/stk", attachAccessToken, async (req, res) => {
+  let {phone_number  } = req.body;
+  const accessToken = req.accessToken;
+  const timestamp = moment().format("YYYYMMDDHHmmss");
+  const auth = "Bearer " + accessToken;
+  const password = new Buffer.from(
+    "174379" +
+      "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919" +
+      timestamp
+  ).toString("base64");
+  const url = "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest";
+
+
+  await fetch(url , {
+    body: JSON.stringify({
+      BusinessShortCode: process.env.BUSINESSSHORTCODE,
+      Password: password,
+      Timestamp: timestamp,
+      TransactionType: "CustomerPayBillOnline",
+      Amount: 1,
+      PartyA: phone_number, //phone number to receive the stk push
+      PartyB: process.env.BUSINESSSHORTCODE,
+      PhoneNumber: phone_number,
+      CallBackURL: process.env.CALLBACKURI,
+      AccountReference: "KSU PAY",
+      TransactionDesc: "Mpesa Daraja API stk push test",
+
+    }),
+    method:"POST",
+    headers: {
+      Authorization: auth,
+      "Content-Type": "application/json"
+    },
+  }).then((resp) => {
+    res.json(resp.data);
+  }).catch((err) => {
+    res.json(err);
+  });  
 });
 
 //STK PUSH CALLBACK ROUTE
@@ -209,6 +264,6 @@ app.get("/b2curlrequest", (req, res) => {
     .catch(console.log);
 });
 
-server.listen(port,'0.0.0.0' , hostname, () => {
-  console.log(`Server running at http://${hostname}:${port}/`);
+server.listen(port,'0.0.0.0', () => {
+  console.log(`Server running at http://localhost:${port}/`);
 });
