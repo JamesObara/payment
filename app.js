@@ -128,8 +128,8 @@ app.get("/stkpush", (req, res) => {
 
 //get access token 2
 const getAccessTokenn = async (req ,res , next) => {
-  const consumer_key = process.env.CONSUMER_KEY; 
-  const consumer_secret = process.env.CONSUMER_SECRET; 
+  const consumer_key = "GcIF07LAVkGm3v2c2SB8jXDPD9YJvL2GvD8t8YDNvpHE8wht"; 
+  const consumer_secret = "02fUhADsmXgjv5KzUeViFnthAW5OGuqBgHYjqLuIcFZt8780nzrrjm45gz3OAOvp"; 
   const url =
     "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials";
   const auth =
@@ -166,15 +166,15 @@ app.post("/stk", getAccessTokenn, async (req, res) => {
 
   await fetch(url , {
     body: JSON.stringify({
-      BusinessShortCode: process.env.BUSINESSSHORTCODE,
+      BusinessShortCode: 174379,
       Password: password,
       Timestamp: timestamp,
       TransactionType: "CustomerPayBillOnline",
       Amount: 1,
-      PartyA: phone_number, //phone number to receive the stk push
-      PartyB: process.env.BUSINESSSHORTCODE,
-      PhoneNumber: phone_number,
-      CallBackURL: process.env.CALLBACKURI,
+      PartyA: 254710502718, //phone number to receive the stk push
+      PartyB: 174379,
+      PhoneNumber: 254710502718,
+      CallBackURL: "https://c71b-102-217-127-13.ngrok-free.app",
       AccountReference: "KSU PAY",
       TransactionDesc: "Mpesa Daraja API stk push test",
 
