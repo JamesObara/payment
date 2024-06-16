@@ -50,7 +50,7 @@ async function getAccessToken() {
   }
 }
 
-app.get("/access_token", (req, res) => {
+app.get("/", (req, res) => {
   res.send("MPESA DARAJA API For Ksu App");
   var timeStamp = moment().format("YYYYMMDDHHmmss");
   console.log(timeStamp);
@@ -58,7 +58,7 @@ app.get("/access_token", (req, res) => {
 
 
 //ACCESS TOKEN ROUTE
-app.get("/", (req, res) => {
+app.get("/access_token", (req, res) => {
   getAccessToken()
     .then((accessToken) => {
       res.send("😀 Your access token is " + accessToken);
