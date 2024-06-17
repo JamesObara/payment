@@ -175,7 +175,7 @@ app.post("/stk", getAccessTokenn, async (req, res) => {
       PartyA: phone_number, //phone number to receive the stk push
       PartyB: 174379,
       PhoneNumber: phone_number,
-      CallBackURL: "https://mpesa-ksu-production.up.railway.app/stk_callback",
+      CallBackURL: "https://77cd-102-217-127-13.ngrok-free.app/stk_callback",
       AccountReference: "KSU PAY",
       TransactionDesc: "Mpesa Daraja API stk push test",
 
