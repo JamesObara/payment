@@ -175,7 +175,7 @@ app.post("/stk", getAccessTokenn, async (req, res) => {
       PartyA: phone_number, //phone number to receive the stk push
       PartyB: 174379,
       PhoneNumber: phone_number,
-      CallBackURL: "https://mpesa-ksu-production.up.railway.app/callback",
+      CallBackURL: "https://mpesa-ksu-production.up.railway.app/stk_callback",
       AccountReference: "KSU PAY",
       TransactionDesc: "Mpesa Daraja API stk push test",
 
@@ -190,6 +190,13 @@ app.post("/stk", getAccessTokenn, async (req, res) => {
   }).catch((err) => {
     res.json(err);
   });  
+});
+
+app.post('/stk_callback', (req, res) => {
+  const better = req.body.Body.stkCallback;
+  console.log(better);
+  res.sendStatus(200);
+  
 });
 
 //STK PUSH CALLBACK ROUTE
