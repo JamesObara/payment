@@ -152,8 +152,9 @@ const getAccessTokenn = async (req ,res , next) => {
 
 //MPESA STK PUSH ROUTE2
 app.post("/stk", getAccessTokenn, async (req, res) => {
-  let {phone_number  } = req.body;
-   console.log('Phone number received:', phone_number);
+  let {phone_number ,payable_amount } = req.body;
+   console.log('Phone number received:', phone_number); 
+   console.log('payable amount received:', payable_amount);
   // const accessToken = req.accessToken;
   const timestamp = moment().format("YYYYMMDDHHmmss");
   // const auth = "Bearer " + access_token;
@@ -171,11 +172,11 @@ app.post("/stk", getAccessTokenn, async (req, res) => {
       Password: password,
       Timestamp: timestamp,
       TransactionType: "CustomerPayBillOnline",
-      Amount: 1,
-      PartyA: phone_number, //phone number to receive the stk push
+      Amount: payable_amount,
+      PartyA: phone_number, 
       PartyB: 174379,
       PhoneNumber: phone_number,
-      CallBackURL: "https://77cd-102-217-127-13.ngrok-free.app/stk_callback",
+      CallBackURL: "https://3514-102-217-127-21.ngrok-free.app/stk_callback",
       AccountReference: "KSU PAY",
       TransactionDesc: "Mpesa Daraja API stk push test",
 
