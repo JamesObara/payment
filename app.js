@@ -1,302 +1,228 @@
-/*
-  @package mpesa payment
-  Author: james Obara
-*/
-
 const express = require("express");
-const http = require("http");
-const bodyParser = require("body-parser");
-const axios = require("axios"); // Import 'axios' instead of 'request'
+const axios = require("axios");
 const moment = require("moment");
-const apiRouter = require('./api');
 const cors = require("cors");
 const fs = require("fs");
 require('dotenv').config();
 
-
 const app = express();
-app.use(cors({
-    origin: "*",
-}));
+
+// Middleware
+app.use(cors({ origin: "*" }));
 app.use(express.json());
-app.use(express.urlencoded({extended: true}))
+app.use(express.urlencoded({ extended: true }));
 
-const port = process.env.PORT  || 3000;
-// app.use(bodyParser.json());
-// app.use(bodyParser.urlencoded({ extended: false }));
+const port = process.env.PORT || 4000;
 
-app.use('/', apiRouter);
 
-const server = http.createServer(app);
-
-// ACCESS TOKEN FUNCTION - Updated to use 'axios'
+// Utility function to get access token
 async function getAccessToken() {
-  const consumer_key = process.env.CONSUMER_KEY; 
-  const consumer_secret = process.env.CONSUMER_SECRET; 
-  const url =
-    "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials";
-  const auth =
-    "Basic " +
-    new Buffer.from(consumer_key + ":" + consumer_secret).toString("base64");
+  const consumer_key = process.env.CONSUMER_KEY;
+  const consumer_secret = process.env.CONSUMER_SECRET;
+  
+  if (!consumer_key || !consumer_secret) {
+    throw new Error('Missing M-Pesa credentials in environment variables');
+  }
+
+  const url = "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials";
+  const auth = "Basic " + Buffer.from(`${consumer_key}:${consumer_secret}`).toString("base64");
+
+  console.log("AUTH HEADER:", auth);
+
 
   try {
     const response = await axios.get(url, {
-      headers: {
-        Authorization: auth,
-      },
+      headers: { Authorization: auth }
     });
-   
-    const dataresponse = response.data;
-    console.log(auth);
-    const accessToken = dataresponse.access_token;
-    return accessToken;
+    return response.data.access_token;
   } catch (error) {
-    throw error;
+    console.error('Error getting access token:', error.message);
+    throw new Error('Failed to get access token');
   }
 }
+
+// Middleware to attach access token
 const attachAccessToken = async (req, res, next) => {
   try {
     const accessToken = await getAccessToken();
     req.accessToken = accessToken;
     next();
   } catch (error) {
-    res.status(500).send('Error fetching access token');
+    res.status(500).json({ error: 'Failed to authenticate with M-Pesa API' });
   }
 };
 
+// Validation middleware
+const validateStkPushRequest = (req, res, next) => {
+  const { phone_number, payable_amount } = req.body;
+  
+  if (!phone_number || !payable_amount) {
+    return res.status(400).json({ 
+      error: 'Phone number and payable amount are required' 
+    });
+  }
+
+  // Basic phone number validation (Kenyan format)
+  if (!/^254\d{9}$/.test(phone_number)) {
+    return res.status(400).json({ 
+      error: 'Invalid phone number format. Use 254XXXXXXXXX' 
+    });
+  }
+
+  // Amount validation
+  if (isNaN(payable_amount) || payable_amount <= 0) {
+    return res.status(400).json({ 
+      error: 'Invalid amount. Must be a positive number' 
+    });
+  }
+
+  next();
+};
+
+// Routes
 app.get("/", (req, res) => {
-  res.send("MPESA DARAJA API For Ksu App");
-  var timeStamp = moment().format("YYYYMMDDHHmmss");
-//   console.log(timeStamp);
+  res.json({ 
+    message: "M-Pesa Daraja API For KSU App", 
+    status: "active",
+    timestamp: moment().format("YYYY-MM-DD HH:mm:ss")
+  });
 });
 
-
-//ACCESS TOKEN ROUTE
-app.get("/access_token", (req, res) => {
-  getAccessToken()
-    .then((accessToken) => {
-      res.send("😀 Your access token is " + accessToken);
-    })
-    .catch(console.log);
+// Get access token (for testing)
+app.get("/access_token", async (req, res) => {
+  try {
+    const accessToken = await getAccessToken();
+    res.json({ access_token: accessToken });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-//MPESA STK PUSH ROUTE
-app.get("/stkpush", (req, res) => {
-  getAccessToken()
-    .then((accessToken) => {
-      const url = "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest";
-      const auth = "Bearer " + accessToken;
-      const timestamp = moment().format("YYYYMMDDHHmmss");
-      const password = new Buffer.from(
-        "174379" +
-          "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919" +
-          timestamp
-      ).toString("base64");
+// STK Push endpoint
+app.post("/stkpush", validateStkPushRequest, attachAccessToken, async (req, res) => {
+  const { phone_number, payable_amount } = req.body;
+  
+  try {
+    const timestamp = moment().format("YYYYMMDDHHmmss");
+    const businessShortCode = process.env.BUSINESSSHORTCODE;
+    const passkey = process.env.PASSKEY;
+    
+    const password = Buffer.from(
+      businessShortCode + passkey + timestamp
+    ).toString("base64");
 
-      axios
-        .post(
-          url,
-          {
-            BusinessShortCode: process.env.BUSINESSSHORTCODE,
-            Password: password,
-            Timestamp: timestamp,
-            TransactionType: "CustomerPayBillOnline",
-            Amount: "1",
-            PartyA: "254710502718", //phone number to receive the stk push
-            PartyB: process.env.BUSINESSSHORTCODE,
-            PhoneNumber: "254710502718",
-            CallBackURL: process.env.CALLBACKURI,
-            AccountReference: "KSU PAY",
-            TransactionDesc: "Mpesa Daraja API stk push test",
-          },
-          {
-            headers: {
-              Authorization: auth,
-            },
-          }
-        )
-        .then((response) => {
-          res.send("😀 Request is successful done ✔✔. Please enter mpesa pin to complete the transaction");
-        })
-        .catch((error) => {
-          console.log(error);
-          res.status(500).send("❌ Request failed");
-        });
-    })
-    .catch(console.log);
-});
-
-//get access token 2
-const getAccessTokenn = async (req ,res , next) => {
-  const consumer_key = "GcIF07LAVkGm3v2c2SB8jXDPD9YJvL2GvD8t8YDNvpHE8wht"; 
-  const consumer_secret = "02fUhADsmXgjv5KzUeViFnthAW5OGuqBgHYjqLuIcFZt8780nzrrjm45gz3OAOvp"; 
-  const url =
-    "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials";
-  const auth =
-    "Basic " +
-    new Buffer.from(`${consumer_key}:${consumer_secret}`).toString("base64");
-
-    await axios.get(url, {
-      headers: {
-        Authorization: auth,
-      },
-    }).then((res) => {
-      access_token = res.data.access_token;
-      next()
-
-    }).catch((err) => {
-      console.log(err);
-    })
- 
-}
-
-//MPESA STK PUSH ROUTE2
-app.post("/stk", getAccessTokenn, async (req, res) => {
-  let {phone_number ,payable_amount } = req.body;
-   console.log('Phone number received:', phone_number); 
-   console.log('payable amount received:', payable_amount);
-  // const accessToken = req.accessToken;
-  const timestamp = moment().format("YYYYMMDDHHmmss");
-  // const auth = "Bearer " + access_token;
-  const password = new Buffer.from(
-    "174379" +
-      "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919" +
-      timestamp
-  ).toString("base64");
-  const url = "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest";
-
-
-  await fetch(url , {
-    body: JSON.stringify({
-      BusinessShortCode: 174379,
+    const stkPushUrl = "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest";
+    
+    const requestData = {
+      BusinessShortCode: businessShortCode,
       Password: password,
       Timestamp: timestamp,
       TransactionType: "CustomerPayBillOnline",
       Amount: payable_amount,
-      PartyA: phone_number, 
-      PartyB: 174379,
+      PartyA: phone_number,
+      PartyB: businessShortCode,
       PhoneNumber: phone_number,
-      CallBackURL: "https://3514-102-217-127-21.ngrok-free.app/stk_callback",
-      AccountReference: "KSU PAY",
-      TransactionDesc: "Mpesa Daraja API stk push test",
+      CallBackURL: process.env.CALLBACKURI,
+      AccountReference: "Uniconnect PAY",
+      TransactionDesc: "Payment for uniconnect services"
+    };
 
-    }),
-    method:"POST",
-    headers: {
-      Authorization: `Bearer ${access_token}`,
-      "Content-Type": "application/json"
-    },
-  }).then((resp) => {
-    res.json(resp.data);
-  }).catch((err) => {
-    res.json(err);
-  });  
+    const response = await axios.post(stkPushUrl, requestData, {
+      headers: {
+        Authorization: `Bearer ${req.accessToken}`,
+        "Content-Type": "application/json"
+      }
+    });
+
+    res.json({
+      success: true,
+      message: "STK push sent successfully. Please check your phone.",
+      data: response.data
+    });
+
+  } catch (error) {
+    console.error('STK Push error:', error.response?.data || error.message);
+    res.status(500).json({
+      success: false,
+      error: "Failed to process STK push request"
+    });
+  }
 });
 
-app.post('/stk_callback', (req, res) => {
-  const better = req.body.Body.stkCallback;
-  console.log(better);
-  res.sendStatus(200);
-  
-});
-
-//STK PUSH CALLBACK ROUTE
-app.post("/callback", (req, res) => {
-  console.log("STK PUSH CALLBACK");
-  const CheckoutRequestID = req.body.Body.stkCallback.CheckoutRequestID;
-  const ResultCode = req.body.Body.stkCallback.ResultCode;
-  var json = JSON.stringify(req.body);
-  fs.writeFile("stkcallback.json", json, "utf8", function (err) {
-    if (err) {
-      return console.log(err);
+// STK Push callback
+app.post("/stk_callback", (req, res) => {
+  try {
+    const callbackData = req.body.Body.stkCallback;
+    
+    console.log('STK Callback received:', callbackData);
+    
+    // Save callback data to file for debugging
+    const timestamp = moment().format("YYYY-MM-DD-HH-mm-ss");
+    const filename = `stk_callback_${timestamp}.json`;
+    
+    fs.writeFileSync(filename, JSON.stringify(callbackData, null, 2), "utf8");
+    console.log(`Callback data saved to ${filename}`);
+    
+    // Process the callback based on ResultCode
+    if (callbackData.ResultCode === 0) {
+      console.log('Payment successful');
+      // Handle successful payment
+    } else {
+      console.log('Payment failed:', callbackData.ResultDesc);
+      // Handle failed payment
     }
-    console.log("STK PUSH CALLBACK JSON FILE SAVED");
+    
+    res.sendStatus(200);
+  } catch (error) {
+    console.error('Callback processing error:', error.message);
+    res.sendStatus(500);
+  }
+});
+
+// Register URLs for C2B (if needed)
+app.post("/registerurl", attachAccessToken, async (req, res) => {
+  try {
+    const url = "https://sandbox.safaricom.co.ke/mpesa/c2b/v1/registerurl";
+    
+    const response = await axios.post(url, {
+      ShortCode: process.env.BUSINESSSHORTCODE,
+      ResponseType: "Complete",
+      ConfirmationURL: process.env.CONFIRMATIONURL,
+      ValidationURL: process.env.VALIDATIONURL
+    }, {
+      headers: {
+        Authorization: `Bearer ${req.accessToken}`
+      }
+    });
+    
+    res.json(response.data);
+  } catch (error) {
+    console.error('URL registration error:', error.response?.data || error.message);
+    res.status(500).json({ error: "Failed to register URLs" });
+  }
+});
+
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.json({ 
+    status: "healthy", 
+    timestamp: moment().format("YYYY-MM-DD HH:mm:ss") 
   });
-  console.log(req.body);
 });
 
-// REGISTER URL FOR C2B
-app.get("/registerurl", (req, resp) => {
-  getAccessToken()
-    .then((accessToken) => {
-      const url = "https://sandbox.safaricom.co.ke/mpesa/c2b/v1/registerurl";
-      const auth = "Bearer " + accessToken;
-      axios
-        .post(
-          url,
-          {
-            ShortCode: "174379",
-            ResponseType: "Complete",
-            ConfirmationURL: "http://example.com/confirmation",
-            ValidationURL: "http://example.com/validation",
-          },
-          {
-            headers: {
-              Authorization: auth,
-            },
-          }
-        )
-        .then((response) => {
-          resp.status(200).json(response.data);
-        })
-        .catch((error) => {
-          console.log(error);
-          resp.status(500).send("❌ Request failed");
-        });
-    })
-    .catch(console.log);
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err.stack);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
-app.get("/confirmation", (req, res) => {
-  console.log("All transaction will be sent to this URL");
-  console.log(req.body);
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Endpoint not found' });
 });
 
-app.get("/validation", (req, resp) => {
-  console.log("Validating payment");
-  console.log(req.body);
-});
-
-// B2C ROUTE OR AUTO WITHDRAWAL
-app.get("/b2curlrequest", (req, res) => {
-  getAccessToken()
-    .then((accessToken) => {
-      const securityCredential =
-        "N3Lx/hisedzPLxhDMDx80IcioaSO7eaFuMC52Uts4ixvQ/Fhg5LFVWJ3FhamKur/bmbFDHiUJ2KwqVeOlSClDK4nCbRIfrqJ+jQZsWqrXcMd0o3B2ehRIBxExNL9rqouKUKuYyKtTEEKggWPgg81oPhxQ8qTSDMROLoDhiVCKR6y77lnHZ0NU83KRU4xNPy0hRcGsITxzRWPz3Ag+qu/j7SVQ0s3FM5KqHdN2UnqJjX7c0rHhGZGsNuqqQFnoHrshp34ac/u/bWmrApUwL3sdP7rOrb0nWasP7wRSCP6mAmWAJ43qWeeocqrz68TlPDIlkPYAT5d9QlHJbHHKsa1NA==";
-      const url = "https://sandbox.safaricom.co.ke/mpesa/b2c/v1/paymentrequest";
-      const auth = "Bearer " + accessToken;
-      axios
-        .post(
-          url,
-          {
-            InitiatorName: "testapi",
-            SecurityCredential: securityCredential,
-            CommandID: "PromotionPayment",
-            Amount: "1",
-            PartyA: "600996",
-            PartyB: "",//phone number to receive the stk push
-            Remarks: "Withdrawal",
-            QueueTimeOutURL: "https://mydomain.com/b2c/queue",
-            ResultURL: "https://mydomain.com/b2c/result",
-            Occasion: "Withdrawal",
-          },
-          {
-            headers: {
-              Authorization: auth,
-            },
-          }
-        )
-        .then((response) => {
-          res.status(200).json(response.data);
-        })
-        .catch((error) => {
-          console.log(error);
-          res.status(500).send("❌ Request failed");
-        });
-    })
-    .catch(console.log);
-});
-
-server.listen(port,'0.0.0.0', () => {
-  console.log(`Server running at http://localhost:${port}/`);
+// Start server
+app.listen(port, '0.0.0.0', () => {
+  console.log(`M-Pesa API server running at http://localhost:${port}/`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
